@@ -17,7 +17,8 @@ function status(message) {
 
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, options);
-  const data = await response.json();
+  const contentType = response.headers.get("content-type") || "";
+  const data = contentType.includes("application/json") ? await response.json() : { detail: await response.text() };
   if (!response.ok) {
     throw new Error(data.detail || "Request failed");
   }
@@ -41,7 +42,7 @@ function renderMetrics(summary = {}) {
   const cards = [
     ["Net PnL", `${(summary.net_pnl ?? 0).toFixed(2)} USD`, `Return ${(summary.return_pct ?? 0).toFixed(2)}%`],
     ["Final Equity", `${(summary.final_equity ?? 0).toFixed(2)} USD`, `Start ${(summary.initial_capital ?? 0).toFixed(2)} USD`],
-    ["Max DD", `${(summary.max_drawdown_pct ?? 0).toFixed(2)}%`, "obsunięcie kapitału"],
+    ["Max DD", `${(summary.max_drawdown_pct ?? 0).toFixed(2)}%`, "drawdown"],
     ["Trades", `${summary.trade_count ?? 0}`, `Win rate ${(summary.win_rate_pct ?? 0).toFixed(2)}%`],
     ["Profit Factor", `${(summary.profit_factor ?? 0).toFixed(2)}`, `Avg ${(summary.avg_trade_pnl ?? 0).toFixed(2)} USD`],
     ["Kill Switch", summary.kill_switch_hit ? "ARMED" : "idle", "daily guard -4500"],
@@ -160,6 +161,8 @@ function renderPayload(payload) {
     mode: payload.mode,
     best_params: payload.best_params || payload.params || {},
     open_positions: payload.open_positions || [],
+    trade_count_total: payload.trade_count_total || 0,
+    ui_trade_rows: (payload.trades || []).length,
   };
   el("result-json").textContent = JSON.stringify(diagnostic, null, 2);
 }
@@ -195,6 +198,43 @@ function gatherWfoConfig() {
   };
 }
 
+function gatherRunRange() {
+  return {
+    start_date: el("run-start-date").value || null,
+    end_date: el("run-end-date").value || null,
+  };
+}
+
+function gatherFetchConfig() {
+  return {
+    symbol: el("fetch-symbol").value.trim().toUpperCase(),
+    interval: el("fetch-interval").value,
+    market: el("fetch-market").value,
+    start_date: el("fetch-start-date").value,
+    end_date: el("fetch-end-date").value || null,
+  };
+}
+
+function populateSelect(select, values, preferred) {
+  const previous = preferred || select.value;
+  select.innerHTML = "";
+  values.forEach((value) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    select.appendChild(option);
+  });
+  if (previous && values.includes(previous)) {
+    select.value = previous;
+  }
+}
+
+async function loadMarketConfig() {
+  const config = await fetchJson("/api/market-config");
+  populateSelect(el("fetch-interval"), config.intervals, el("fetch-interval").value || "1h");
+  populateSelect(el("fetch-market"), config.markets, el("fetch-market").value || "spot");
+}
+
 async function loadDatasets(selectName = null) {
   const data = await fetchJson("/api/datasets");
   const select = el("dataset-select");
@@ -212,10 +252,30 @@ async function loadDatasets(selectName = null) {
   }
 }
 
+async function fetchBinanceDataset() {
+  const config = gatherFetchConfig();
+  if (!config.symbol || !config.start_date) {
+    status("Podaj symbol i date startu.");
+    return;
+  }
+  status(`Pobieram swiece ${config.symbol} ${config.interval} z Binance...`);
+  const payload = await fetchJson("/api/fetch-binance", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+  await loadDatasets(payload.download.dataset);
+  el("run-start-date").value = config.start_date || "";
+  el("run-end-date").value = config.end_date || "";
+  status(
+    `Pobrano ${payload.download.rows} swiec do ${payload.download.dataset} (${payload.download.start_time} -> ${payload.download.end_time}).`
+  );
+}
+
 async function runBacktest() {
   const dataset = el("dataset-select").value;
   if (!dataset) {
-    status("Najpierw wybierz lub wgraj dataset.");
+    status("Najpierw wybierz dataset albo pobierz dane.");
     return;
   }
   status("Uruchamiam backtest...");
@@ -225,31 +285,33 @@ async function runBacktest() {
     body: JSON.stringify({
       dataset,
       params: gatherStrategyParams(),
+      range: gatherRunRange(),
       force_close_on_end: el("force-close").checked,
     }),
   });
   renderPayload(payload);
-  status(`Backtest gotowy dla ${dataset}.`);
+  status(`Backtest gotowy dla ${dataset}. Tabela pokazuje do 600 ostatnich transakcji.`);
 }
 
 async function runWfo() {
   const dataset = el("dataset-select").value;
   if (!dataset) {
-    status("Najpierw wybierz lub wgraj dataset.");
+    status("Najpierw wybierz dataset albo pobierz dane.");
     return;
   }
-  status("Uruchamiam WFO, to może chwilę potrwać...");
+  status("Uruchamiam WFO. Przy wiekszym zakresie moze to potrwac kilkadziesiat sekund...");
   const payload = await fetchJson("/api/wfo", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       dataset,
       params: gatherStrategyParams(),
+      range: gatherRunRange(),
       wfo: gatherWfoConfig(),
     }),
   });
   renderPayload(payload);
-  status(`WFO gotowe dla ${dataset}.`);
+  status(`WFO gotowe dla ${dataset}. Tabela pokazuje do 600 ostatnich transakcji.`);
 }
 
 async function uploadDataset() {
@@ -269,8 +331,10 @@ async function uploadDataset() {
 
 async function bootstrap() {
   buildChart();
+  await loadMarketConfig();
   await loadDatasets();
 
+  el("fetch-binance").addEventListener("click", () => fetchBinanceDataset().catch((error) => status(error.message)));
   el("run-backtest").addEventListener("click", () => runBacktest().catch((error) => status(error.message)));
   el("run-wfo").addEventListener("click", () => runWfo().catch((error) => status(error.message)));
   el("refresh-datasets").addEventListener("click", () => loadDatasets().catch((error) => status(error.message)));

@@ -18,8 +18,10 @@ for later extensions such as RSI or Stoch RSI filters.
 
 - TMA band logic translated from the MQL5 indicator
 - position sizing and capital management recreated from the EA
-- backtest mode for uploaded OHLCV CSV files
+- Binance candle download from a selected symbol, interval and date range
+- backtest mode for uploaded or downloaded OHLCV CSV files
 - walk-forward optimization with configurable parameter grids
+- run-time date filtering for backtest and WFO
 - chart view with trade entry and exit markers using TradingView Lightweight Charts
 - containerized deployment for local runs and Contabo hosting
 
@@ -93,9 +95,10 @@ Supported time formats:
 Example flow:
 
 1. Start the app.
-2. Upload your own CSV from the dashboard.
-3. Run a backtest or WFO pass.
-4. Inspect trade placement directly on the chart.
+2. Download candles from Binance or upload your own CSV.
+3. Select the test date range.
+4. Run a backtest or WFO pass.
+5. Inspect trade placement directly on the chart.
 
 ## Important Note About 1:1 Recreation
 

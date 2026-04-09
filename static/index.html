@@ -23,6 +23,33 @@
         </p>
 
         <section class="block">
+          <div class="section-title">Binance</div>
+          <div class="grid two">
+            <label class="field"><span>Symbol</span><input id="fetch-symbol" type="text" value="ETHUSDT" /></label>
+            <label class="field">
+              <span>Interval</span>
+              <select id="fetch-interval">
+                <option value="1h">1h</option>
+                <option value="4h">4h</option>
+                <option value="15m">15m</option>
+                <option value="30m">30m</option>
+                <option value="1d">1d</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Market</span>
+              <select id="fetch-market">
+                <option value="spot">spot</option>
+                <option value="futures">futures</option>
+              </select>
+            </label>
+            <label class="field"><span>Start date</span><input id="fetch-start-date" type="date" value="2024-01-01" /></label>
+            <label class="field"><span>End date</span><input id="fetch-end-date" type="date" /></label>
+          </div>
+          <button class="ghost" id="fetch-binance">Pobierz świece z Binance</button>
+        </section>
+
+        <section class="block">
           <div class="section-title">Dataset</div>
           <label class="field">
             <span>Plik CSV</span>
@@ -73,6 +100,14 @@
             <label class="field"><span>SL grid</span><input id="grid-stop-loss" type="text" value="0.008,0.01,0.012" /></label>
             <label class="field"><span>SL add grid</span><input id="grid-stop-loss-add" type="text" value="0.008,0.01,0.012" /></label>
             <label class="field"><span>Lev profit grid</span><input id="grid-leverage-profit" type="text" value="0.25,0.5,1.0" /></label>
+          </div>
+        </section>
+
+        <section class="block">
+          <div class="section-title">Zakres testu</div>
+          <div class="grid two">
+            <label class="field"><span>Od</span><input id="run-start-date" type="date" /></label>
+            <label class="field"><span>Do</span><input id="run-end-date" type="date" /></label>
           </div>
         </section>
 

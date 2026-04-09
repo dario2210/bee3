@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from bee3_data import BASE_DIR, ensure_dirs, list_datasets, load_ohlcv_csv, save_result, save_uploaded_csv
 from bee3_engine import SimulationResult, run_backtest
+from bee3_market_data import TF_MINUTES, download_binance_dataset
 from bee3_params import strategy_params_from_payload, wfo_config_from_payload
 from bee3_wfo import WfoResult, run_wfo
 
@@ -35,6 +36,31 @@ def _serialize_dataframe(df: pd.DataFrame) -> list[dict[str, object]]:
         if pd.api.types.is_datetime64_any_dtype(records[column]):
             records[column] = records[column].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     return records.to_dict(orient="records")
+
+
+def _filter_df_by_range(df: pd.DataFrame, date_range: dict | None) -> pd.DataFrame:
+    if not date_range:
+        return df.reset_index(drop=True)
+
+    filtered = df.copy()
+    start_date = str(date_range.get("start_date", "")).strip()
+    end_date = str(date_range.get("end_date", "")).strip()
+
+    if start_date:
+        filtered = filtered[filtered["time"] >= pd.Timestamp(start_date, tz="UTC")]
+    if end_date:
+        filtered = filtered[filtered["time"] <= pd.Timestamp(end_date, tz="UTC") + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)]
+
+    filtered = filtered.reset_index(drop=True)
+    if len(filtered) < 100:
+        raise ValueError("Too few candles after applying the selected date range")
+    return filtered
+
+
+def _trades_for_ui(trades_df: pd.DataFrame, limit: int = 600) -> list[dict[str, object]]:
+    if trades_df is None or trades_df.empty:
+        return []
+    return _serialize_dataframe(trades_df.tail(limit).reset_index(drop=True))
 
 
 def _chart_payload(df: pd.DataFrame, result: SimulationResult) -> dict[str, object]:
@@ -91,8 +117,8 @@ def _backtest_payload(dataset_name: str, df: pd.DataFrame, result: SimulationRes
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "params": result.params,
         "summary": result.summary,
-        "trades": _serialize_dataframe(result.trades),
-        "equity": _serialize_dataframe(result.equity),
+        "trades": _trades_for_ui(result.trades),
+        "trade_count_total": int(len(result.trades)) if result.trades is not None else 0,
         "open_positions": result.open_positions,
         "chart": _chart_payload(df, result),
     }
@@ -113,8 +139,8 @@ def _wfo_payload(dataset_name: str, df: pd.DataFrame, result: WfoResult) -> dict
         "best_params": result.best_params,
         "summary": result.summary,
         "windows": _serialize_dataframe(result.windows),
-        "trades": _serialize_dataframe(result.trades),
-        "equity": _serialize_dataframe(result.equity),
+        "trades": _trades_for_ui(result.trades),
+        "trade_count_total": int(len(result.trades)) if result.trades is not None else 0,
         "chart": chart,
     }
     save_result("latest_wfo.json", payload)
@@ -137,6 +163,14 @@ async def datasets() -> dict[str, object]:
     return {"datasets": list_datasets()}
 
 
+@app.get("/api/market-config")
+async def market_config() -> dict[str, object]:
+    return {
+        "intervals": list(TF_MINUTES.keys()),
+        "markets": ["spot", "futures"],
+    }
+
+
 @app.post("/api/upload")
 async def upload_dataset(file: UploadFile = File(...)) -> dict[str, object]:
     if not file.filename:
@@ -144,6 +178,37 @@ async def upload_dataset(file: UploadFile = File(...)) -> dict[str, object]:
     content = await file.read()
     name = save_uploaded_csv(file.filename, content)
     return {"dataset": name, "datasets": list_datasets()}
+
+
+@app.post("/api/fetch-binance")
+async def fetch_binance(payload: dict) -> JSONResponse:
+    symbol = str(payload.get("symbol", "")).strip().upper()
+    interval = str(payload.get("interval", "")).strip()
+    market = str(payload.get("market", "spot")).strip().lower()
+    start_date = str(payload.get("start_date", "")).strip()
+    end_date = str(payload.get("end_date", "")).strip() or None
+
+    if not symbol:
+        raise HTTPException(status_code=400, detail="Missing symbol")
+    if interval not in TF_MINUTES:
+        raise HTTPException(status_code=400, detail="Unsupported interval")
+    if market not in {"spot", "futures"}:
+        raise HTTPException(status_code=400, detail="Unsupported market")
+    if not start_date:
+        raise HTTPException(status_code=400, detail="Missing start_date")
+
+    try:
+        result = download_binance_dataset(
+            symbol=symbol,
+            interval=interval,
+            market=market,
+            start_date=start_date,
+            end_date=end_date,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return JSONResponse({"download": result, "datasets": list_datasets()})
 
 
 @app.post("/api/backtest")
@@ -158,6 +223,7 @@ async def backtest(payload: dict) -> JSONResponse:
 
     try:
         df = load_ohlcv_csv(dataset_name)
+        df = _filter_df_by_range(df, payload.get("range"))
         result = run_backtest(df, params)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -176,6 +242,7 @@ async def wfo(payload: dict) -> JSONResponse:
 
     try:
         df = load_ohlcv_csv(dataset_name)
+        df = _filter_df_by_range(df, payload.get("range"))
         result = run_wfo(df, params, config)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc
