@@ -112,8 +112,24 @@
         </section>
 
         <section class="block actions">
-          <button class="primary" id="run-backtest">Uruchom backtest</button>
-          <button class="accent" id="run-wfo">Uruchom WFO</button>
+          <div class="action-row">
+            <button class="primary" id="run-backtest">Uruchom backtest</button>
+            <button class="accent" id="run-wfo">Uruchom WFO</button>
+          </div>
+          <button class="danger" id="run-stop" disabled>STOP</button>
+          <div class="run-progress-card">
+            <div class="run-progress-meta">
+              <span id="run-mode-label">Brak aktywnego runu</span>
+              <span id="run-window-label">0/0</span>
+            </div>
+            <div class="run-progress-bar">
+              <div id="run-progress-fill"></div>
+            </div>
+            <div class="run-progress-meta subtle">
+              <span id="run-progress-text">Pasek pokaże postęp po starcie symulacji.</span>
+              <span id="run-eta-label">ETA --</span>
+            </div>
+          </div>
           <div id="status-box">Czekam na pierwszy run.</div>
         </section>
       </aside>
@@ -155,6 +171,18 @@
         </section>
 
         <section class="grid-panels">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <div class="eyebrow">live feed</div>
+                <h3>Nowe transakcje na żywo</h3>
+              </div>
+            </div>
+            <div id="live-trades-feed" class="trade-feed">
+              <div class="feed-empty">Nowe transakcje pojawią się tutaj w trakcie symulacji.</div>
+            </div>
+          </section>
+
           <section class="panel">
             <div class="panel-head">
               <div>

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
+from time import monotonic
 
 import pandas as pd
 
@@ -13,6 +15,10 @@ from bee3_tma import centered_band_for_index, prefix_sums, tr_components, visibl
 def mt5_round(value: float, digits: int) -> float:
     quant = Decimal("1").scaleb(-digits)
     return float(Decimal(str(value)).quantize(quant, rounding=ROUND_HALF_UP))
+
+
+class RunCancelled(RuntimeError):
+    pass
 
 
 @dataclass(slots=True)
@@ -36,10 +42,29 @@ class SimulationResult:
     open_positions: list[dict[str, object]]
 
 
+TradeCallback = Callable[[dict[str, object]], None]
+ProgressCallback = Callable[[int, int], None]
+StopCheck = Callable[[], bool]
+
+
 class IcarusMmsSimulator:
-    def __init__(self, df: pd.DataFrame, params: StrategyParams) -> None:
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        params: StrategyParams,
+        *,
+        trade_callback: TradeCallback | None = None,
+        progress_callback: ProgressCallback | None = None,
+        stop_check: StopCheck | None = None,
+        progress_step: int = 5,
+    ) -> None:
         self.df = df.reset_index(drop=True).copy()
         self.params = params
+        self.trade_callback = trade_callback
+        self.progress_callback = progress_callback
+        self.stop_check = stop_check
+        self.progress_step = max(1, int(progress_step))
+        self._last_progress_ts = 0.0
 
         self.balance = float(params.initial_capital)
         self.daily_capital = float(params.daily_capital or params.initial_capital)
@@ -60,6 +85,32 @@ class IcarusMmsSimulator:
         self.kill_switch_hit = False
         self.weighted = weighted_prices(self.df)
         self.prefix_tr = prefix_sums(tr_components(self.df))
+
+    def _should_stop(self) -> bool:
+        return bool(self.stop_check and self.stop_check())
+
+    def _raise_if_stopped(self) -> None:
+        if self._should_stop():
+            raise RunCancelled("Run stopped by user")
+
+    def _report_progress(self, completed_bars: int, *, force: bool = False) -> None:
+        if self.progress_callback is None:
+            return
+        now = monotonic()
+        if not force:
+            if completed_bars < len(self.df) and completed_bars % self.progress_step != 0 and now - self._last_progress_ts < 0.2:
+                return
+        self._last_progress_ts = now
+        self.progress_callback(completed_bars, len(self.df))
+
+    @staticmethod
+    def _serialize_time(value: pd.Timestamp) -> str:
+        ts = pd.Timestamp(value)
+        if ts.tzinfo is None:
+            ts = ts.tz_localize("UTC")
+        else:
+            ts = ts.tz_convert("UTC")
+        return ts.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     @property
     def type_position(self) -> str:
@@ -114,20 +165,27 @@ class IcarusMmsSimulator:
         pnl = mt5_round(pnl, 2)
         self.balance = mt5_round(self.balance + pnl, 2)
 
-        self.trades.append(
-            {
-                "side": position.side,
-                "volume": position.volume,
-                "entry_price": position.entry_price,
-                "exit_price": mt5_round(exit_price, 6),
-                "entry_time": position.entry_time,
-                "exit_time": exit_time,
-                "entry_reason": position.entry_reason,
-                "exit_reason": exit_reason,
-                "bars_in_position": max(0, exit_bar_index - position.entry_bar_index + 1),
-                "pnl": pnl,
-            }
-        )
+        trade_record = {
+            "side": position.side,
+            "volume": position.volume,
+            "entry_price": position.entry_price,
+            "exit_price": mt5_round(exit_price, 6),
+            "entry_time": position.entry_time,
+            "exit_time": exit_time,
+            "entry_reason": position.entry_reason,
+            "exit_reason": exit_reason,
+            "bars_in_position": max(0, exit_bar_index - position.entry_bar_index + 1),
+            "pnl": pnl,
+        }
+        self.trades.append(trade_record)
+        if self.trade_callback is not None:
+            self.trade_callback(
+                {
+                    **trade_record,
+                    "entry_time": self._serialize_time(position.entry_time),
+                    "exit_time": self._serialize_time(exit_time),
+                }
+            )
         self.positions.remove(position)
 
     def _close_all(self, bid: float, ask: float, exit_time: pd.Timestamp, exit_reason: str, exit_bar_index: int):
@@ -219,7 +277,9 @@ class IcarusMmsSimulator:
         return compact
 
     def run(self) -> SimulationResult:
+        self._report_progress(0, force=True)
         for bar_index in range(len(self.df)):
+            self._raise_if_stopped()
             bar = self.df.iloc[bar_index]
             tick_path = self._synthetic_ticks(bar)
 
@@ -227,6 +287,7 @@ class IcarusMmsSimulator:
             provisional_low = float(bar["open"])
 
             for tick_offset, tick_price in enumerate(tick_path):
+                self._raise_if_stopped()
                 provisional_high = max(provisional_high, tick_price)
                 provisional_low = min(provisional_low, tick_price)
                 time_value = pd.Timestamp(bar["time"]) + pd.Timedelta(seconds=tick_offset)
@@ -320,8 +381,10 @@ class IcarusMmsSimulator:
                     "open_positions": len(self.positions),
                 }
             )
+            self._report_progress(bar_index + 1)
 
         if self.params.force_close_on_end and self.positions:
+            self._raise_if_stopped()
             last_bar = self.df.iloc[-1]
             exit_time = pd.Timestamp(last_bar["time"]) + pd.Timedelta(seconds=4)
             ask, bid = self._split_price(float(last_bar["close"]))
@@ -351,6 +414,7 @@ class IcarusMmsSimulator:
             final_equity=final_equity,
             kill_switch_hit=self.kill_switch_hit,
         )
+        self._report_progress(len(self.df), force=True)
 
         return SimulationResult(
             params=self.params.as_dict(),
@@ -372,6 +436,21 @@ class IcarusMmsSimulator:
         )
 
 
-def run_backtest(df: pd.DataFrame, params: StrategyParams) -> SimulationResult:
-    simulator = IcarusMmsSimulator(df, params)
+def run_backtest(
+    df: pd.DataFrame,
+    params: StrategyParams,
+    *,
+    trade_callback: TradeCallback | None = None,
+    progress_callback: ProgressCallback | None = None,
+    stop_check: StopCheck | None = None,
+    progress_step: int = 5,
+) -> SimulationResult:
+    simulator = IcarusMmsSimulator(
+        df,
+        params,
+        trade_callback=trade_callback,
+        progress_callback=progress_callback,
+        stop_check=stop_check,
+        progress_step=progress_step,
+    )
     return simulator.run()

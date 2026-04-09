@@ -5,6 +5,12 @@ const state = {
   lowerSeries: null,
   markersApi: null,
   lastPayload: null,
+  activeJobId: null,
+  pollHandle: null,
+  tradeCursor: 0,
+  windowCursor: 0,
+  liveTrades: [],
+  liveWindows: [],
 };
 
 function el(id) {
@@ -229,6 +235,185 @@ function populateSelect(select, values, preferred) {
   }
 }
 
+function clearPolling() {
+  if (state.pollHandle) {
+    clearInterval(state.pollHandle);
+    state.pollHandle = null;
+  }
+}
+
+function setRunControls(running) {
+  el("run-backtest").disabled = running;
+  el("run-wfo").disabled = running;
+  el("run-stop").disabled = !running;
+}
+
+function resetRunView(mode, dataset) {
+  state.lastPayload = null;
+  state.activeJobId = null;
+  state.tradeCursor = 0;
+  state.windowCursor = 0;
+  state.liveTrades = [];
+  state.liveWindows = [];
+  renderMetrics({});
+  renderTable("trades-table", [], []);
+  renderTable("windows-table", [], []);
+  el("live-trades-feed").innerHTML =
+    '<div class="feed-empty">Nowe transakcje pojawią się tutaj w trakcie symulacji.</div>';
+  el("result-json").textContent = JSON.stringify({ mode, dataset, status: "running" }, null, 2);
+  updateProgress({
+    percent: 0,
+    eta_label: "ETA --",
+    window_label: "0/0",
+    bar_label: "",
+    phase_label: "Pasek pokaże postęp po starcie symulacji.",
+    mode,
+  });
+}
+
+function updateProgress(progress = {}) {
+  const percent = Math.max(0, Math.min(100, Number(progress.percent ?? 0)));
+  el("run-progress-fill").style.width = `${percent}%`;
+  el("run-progress-text").textContent = progress.phase_label || "Pasek pokaże postęp po starcie symulacji.";
+  el("run-eta-label").textContent = progress.eta_label || "ETA --";
+
+  const label = progress.window_label || progress.bar_label || "0/0";
+  el("run-window-label").textContent = label;
+
+  const modeMap = {
+    backtest: "Backtest",
+    wfo: "WFO",
+  };
+  el("run-mode-label").textContent = modeMap[progress.mode] || modeMap[state.lastPayload?.mode] || "Brak aktywnego runu";
+}
+
+function tradeFeedItem(trade) {
+  const item = document.createElement("div");
+  item.className = "trade-feed-item";
+  const pnl = Number(trade.pnl ?? 0);
+  const pnlClass = pnl >= 0 ? "profit" : "loss";
+  const side = String(trade.side || "").toUpperCase();
+  item.innerHTML = `
+    <div class="trade-feed-head">
+      <div class="trade-feed-side">#${trade.seq} ${side}</div>
+      <div class="trade-feed-pnl ${pnlClass}">${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)} USD</div>
+    </div>
+    <div class="trade-feed-note">
+      ${trade.entry_reason || "-"} -> ${trade.exit_reason || "-"}
+    </div>
+    <div class="trade-feed-meta">
+      <span>${trade.entry_time || "-"}</span>
+      <span>vol ${Number(trade.volume ?? 0).toFixed(2)}</span>
+    </div>
+  `;
+  return item;
+}
+
+function appendLiveTrades(trades) {
+  if (!trades?.length) {
+    return;
+  }
+  const feed = el("live-trades-feed");
+  if (feed.querySelector(".feed-empty")) {
+    feed.innerHTML = "";
+  }
+  trades.forEach((trade) => {
+    state.liveTrades.push(trade);
+    feed.appendChild(tradeFeedItem(trade));
+  });
+  renderTable("trades-table", state.liveTrades, [
+    { key: "entry_time", label: "Entry" },
+    { key: "exit_time", label: "Exit" },
+    { key: "side", label: "Side" },
+    { key: "volume", label: "Vol" },
+    { key: "entry_reason", label: "Reason In" },
+    { key: "exit_reason", label: "Reason Out" },
+    { key: "pnl", label: "PnL" },
+  ]);
+}
+
+function appendLiveWindows(windows) {
+  if (!windows?.length) {
+    return;
+  }
+  windows.forEach((windowRow) => state.liveWindows.push(windowRow));
+  renderTable("windows-table", state.liveWindows, [
+    { key: "window_id", label: "Window" },
+    { key: "best_half_length", label: "Half" },
+    { key: "best_atr_period", label: "ATR" },
+    { key: "best_atr_multiplier", label: "ATR mult" },
+    { key: "best_stop_loss", label: "SL" },
+    { key: "live_return_pct", label: "Live %" },
+    { key: "live_trade_count", label: "Trades" },
+  ]);
+}
+
+function renderLiveDiagnostic(snapshot) {
+  const diagnostic = {
+    job_id: snapshot.job_id,
+    mode: snapshot.mode,
+    dataset: snapshot.dataset,
+    running: snapshot.running,
+    status: snapshot.status,
+    progress_pct: snapshot.progress?.percent ?? 0,
+    window: snapshot.progress?.window_label || "",
+    eta: snapshot.progress?.eta_label || "",
+    live_trade_count: snapshot.live_trade_count ?? 0,
+    live_window_count: snapshot.live_window_count ?? 0,
+  };
+  el("result-json").textContent = JSON.stringify(diagnostic, null, 2);
+}
+
+function applyRunSnapshot(snapshot) {
+  if (!snapshot) {
+    return;
+  }
+
+  state.activeJobId = snapshot.job_id || state.activeJobId;
+  state.tradeCursor = snapshot.trade_cursor ?? state.tradeCursor;
+  state.windowCursor = snapshot.window_cursor ?? state.windowCursor;
+  setRunControls(Boolean(snapshot.running));
+  status(snapshot.status || "Brak statusu.");
+  updateProgress({ ...(snapshot.progress || {}), mode: snapshot.mode });
+  appendLiveTrades(snapshot.new_trades || []);
+  appendLiveWindows(snapshot.new_windows || []);
+
+  if (snapshot.result) {
+    renderPayload(snapshot.result);
+    clearPolling();
+    setRunControls(false);
+    renderLiveDiagnostic(snapshot);
+    return;
+  }
+
+  renderLiveDiagnostic(snapshot);
+  if (!snapshot.running) {
+    clearPolling();
+    setRunControls(false);
+  }
+}
+
+async function pollRunStatus() {
+  if (!state.activeJobId) {
+    return;
+  }
+  const snapshot = await fetchJson(
+    `/api/run-status?after_trade=${state.tradeCursor || 0}&after_window=${state.windowCursor || 0}`
+  );
+  applyRunSnapshot(snapshot);
+}
+
+function startPolling() {
+  clearPolling();
+  state.pollHandle = setInterval(() => {
+    pollRunStatus().catch((error) => {
+      clearPolling();
+      setRunControls(false);
+      status(error.message);
+    });
+  }, 1000);
+}
+
 async function loadMarketConfig() {
   const config = await fetchJson("/api/market-config");
   populateSelect(el("fetch-interval"), config.intervals, el("fetch-interval").value || "1h");
@@ -272,46 +457,57 @@ async function fetchBinanceDataset() {
   );
 }
 
-async function runBacktest() {
+async function startRun(endpoint, body, mode) {
   const dataset = el("dataset-select").value;
   if (!dataset) {
     status("Najpierw wybierz dataset albo pobierz dane.");
     return;
   }
-  status("Uruchamiam backtest...");
-  const payload = await fetchJson("/api/backtest", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      dataset,
-      params: gatherStrategyParams(),
-      range: gatherRunRange(),
-      force_close_on_end: el("force-close").checked,
-    }),
-  });
-  renderPayload(payload);
-  status(`Backtest gotowy dla ${dataset}. Tabela pokazuje do 600 ostatnich transakcji.`);
+
+  resetRunView(mode, dataset);
+  setRunControls(true);
+  status(`Uruchamiam ${mode === "wfo" ? "WFO" : "backtest"}...`);
+  try {
+    const snapshot = await fetchJson(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    state.activeJobId = snapshot.job_id;
+    applyRunSnapshot(snapshot);
+    await pollRunStatus();
+    startPolling();
+  } catch (error) {
+    clearPolling();
+    setRunControls(false);
+    throw error;
+  }
+}
+
+async function runBacktest() {
+  const dataset = el("dataset-select").value;
+  await startRun("/api/run-backtest", {
+    dataset,
+    params: gatherStrategyParams(),
+    range: gatherRunRange(),
+    force_close_on_end: el("force-close").checked,
+  }, "backtest");
 }
 
 async function runWfo() {
   const dataset = el("dataset-select").value;
-  if (!dataset) {
-    status("Najpierw wybierz dataset albo pobierz dane.");
-    return;
-  }
-  status("Uruchamiam WFO. Przy wiekszym zakresie moze to potrwac kilkadziesiat sekund...");
-  const payload = await fetchJson("/api/wfo", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      dataset,
-      params: gatherStrategyParams(),
-      range: gatherRunRange(),
-      wfo: gatherWfoConfig(),
-    }),
-  });
-  renderPayload(payload);
-  status(`WFO gotowe dla ${dataset}. Tabela pokazuje do 600 ostatnich transakcji.`);
+  await startRun("/api/run-wfo", {
+    dataset,
+    params: gatherStrategyParams(),
+    range: gatherRunRange(),
+    wfo: gatherWfoConfig(),
+  }, "wfo");
+}
+
+async function stopRun() {
+  const snapshot = await fetchJson("/api/run-stop", { method: "POST" });
+  applyRunSnapshot(snapshot);
 }
 
 async function uploadDataset() {
@@ -337,8 +533,19 @@ async function bootstrap() {
   el("fetch-binance").addEventListener("click", () => fetchBinanceDataset().catch((error) => status(error.message)));
   el("run-backtest").addEventListener("click", () => runBacktest().catch((error) => status(error.message)));
   el("run-wfo").addEventListener("click", () => runWfo().catch((error) => status(error.message)));
+  el("run-stop").addEventListener("click", () => stopRun().catch((error) => status(error.message)));
   el("refresh-datasets").addEventListener("click", () => loadDatasets().catch((error) => status(error.message)));
   el("dataset-upload").addEventListener("change", () => uploadDataset().catch((error) => status(error.message)));
+  setRunControls(false);
+
+  const snapshot = await fetchJson("/api/run-status");
+  if (snapshot.running || snapshot.result || snapshot.live_trade_count || snapshot.live_window_count) {
+    state.activeJobId = snapshot.job_id;
+    applyRunSnapshot(snapshot);
+    if (snapshot.running) {
+      startPolling();
+    }
+  }
 }
 
 bootstrap().catch((error) => status(error.message));

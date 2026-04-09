@@ -182,11 +182,69 @@ button.accent {
   color: #1e1008;
 }
 
+button.danger {
+  width: 100%;
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  color: #fff5f5;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+  transform: none;
+  filter: none;
+}
+
 button.ghost {
   width: 100%;
   background: transparent;
   color: var(--muted);
   border: 1px solid var(--border);
+}
+
+.action-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.run-progress-card {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.run-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.run-progress-meta.subtle {
+  color: var(--muted);
+}
+
+.run-progress-bar {
+  position: relative;
+  margin: 12px 0;
+  height: 14px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+#run-progress-fill {
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--sky), var(--teal), var(--amber));
+  box-shadow: 0 0 22px rgba(105, 183, 255, 0.35);
+  transition: width 220ms ease;
 }
 
 #status-box {
@@ -293,6 +351,70 @@ button.ghost {
   gap: 22px;
 }
 
+.trade-feed {
+  display: grid;
+  gap: 10px;
+  max-height: 520px;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.trade-feed-item,
+.feed-empty {
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(10, 18, 31, 0.82));
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.feed-empty {
+  color: var(--muted);
+}
+
+.trade-feed-head,
+.trade-feed-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.trade-feed-head {
+  margin-bottom: 8px;
+}
+
+.trade-feed-side {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+
+.trade-feed-pnl {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.trade-feed-pnl.profit {
+  color: var(--teal);
+}
+
+.trade-feed-pnl.loss {
+  color: var(--rose);
+}
+
+.trade-feed-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.trade-feed-meta {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 10px;
+}
+
 .table-wrap {
   overflow: auto;
 }
@@ -370,6 +492,10 @@ th {
   }
 
   .grid.two {
+    grid-template-columns: 1fr;
+  }
+
+  .action-row {
     grid-template-columns: 1fr;
   }
 
