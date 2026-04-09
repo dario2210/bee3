@@ -7,6 +7,8 @@ const state = {
   lastPayload: null,
   activeJobId: null,
   pollHandle: null,
+  pollInFlight: false,
+  pollFailures: 0,
   tradeCursor: 0,
   windowCursor: 0,
   liveTrades: [],
@@ -237,9 +239,10 @@ function populateSelect(select, values, preferred) {
 
 function clearPolling() {
   if (state.pollHandle) {
-    clearInterval(state.pollHandle);
+    clearTimeout(state.pollHandle);
     state.pollHandle = null;
   }
+  state.pollInFlight = false;
 }
 
 function setRunControls(running) {
@@ -251,6 +254,8 @@ function setRunControls(running) {
 function resetRunView(mode, dataset) {
   state.lastPayload = null;
   state.activeJobId = null;
+  state.pollFailures = 0;
+  state.pollInFlight = false;
   state.tradeCursor = 0;
   state.windowCursor = 0;
   state.liveTrades = [];
@@ -394,24 +399,42 @@ function applyRunSnapshot(snapshot) {
 }
 
 async function pollRunStatus() {
-  if (!state.activeJobId) {
+  if (!state.activeJobId || state.pollInFlight) {
     return;
   }
-  const snapshot = await fetchJson(
-    `/api/run-status?after_trade=${state.tradeCursor || 0}&after_window=${state.windowCursor || 0}`
-  );
-  applyRunSnapshot(snapshot);
+  state.pollInFlight = true;
+  try {
+    const snapshot = await fetchJson(
+      `/api/run-status?after_trade=${state.tradeCursor || 0}&after_window=${state.windowCursor || 0}`,
+      { cache: "no-store" }
+    );
+    state.pollFailures = 0;
+    applyRunSnapshot(snapshot);
+  } finally {
+    state.pollInFlight = false;
+  }
 }
 
-function startPolling() {
+function schedulePoll(delay = 1000) {
   clearPolling();
-  state.pollHandle = setInterval(() => {
-    pollRunStatus().catch((error) => {
-      clearPolling();
-      setRunControls(false);
-      status(error.message);
-    });
-  }, 1000);
+  state.pollHandle = setTimeout(async () => {
+    try {
+      await pollRunStatus();
+      const shouldContinue = state.activeJobId && el("run-stop").disabled === false;
+      if (shouldContinue) {
+        schedulePoll(1000);
+      }
+    } catch (error) {
+      state.pollFailures += 1;
+      const retryDelay = Math.min(8000, 1000 * 2 ** Math.min(state.pollFailures - 1, 3));
+      status(`Utracono połączenie z dashboardem, ponawiam za ${Math.round(retryDelay / 1000)}s...`);
+      if (state.activeJobId) {
+        schedulePoll(retryDelay);
+      } else {
+        clearPolling();
+      }
+    }
+  }, delay);
 }
 
 async function loadMarketConfig() {
@@ -477,7 +500,9 @@ async function startRun(endpoint, body, mode) {
     state.activeJobId = snapshot.job_id;
     applyRunSnapshot(snapshot);
     await pollRunStatus();
-    startPolling();
+    if (el("run-stop").disabled === false) {
+      schedulePoll(1000);
+    }
   } catch (error) {
     clearPolling();
     setRunControls(false);
@@ -543,7 +568,7 @@ async function bootstrap() {
     state.activeJobId = snapshot.job_id;
     applyRunSnapshot(snapshot);
     if (snapshot.running) {
-      startPolling();
+      schedulePoll(1000);
     }
   }
 }
