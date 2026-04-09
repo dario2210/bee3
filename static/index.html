@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bee3 | Icarus MMS Lab</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="panel controls">
+        <div class="eyebrow">bee3 / contabo lab</div>
+        <h1>Icarus MMS Strategy Console</h1>
+        <p class="lede">
+          Backtest i WFO dla strategii przepisanej z MQL5, z markerami wejść i wyjść
+          na wykresie TradingView Lightweight Charts.
+        </p>
+
+        <section class="block">
+          <div class="section-title">Dataset</div>
+          <label class="field">
+            <span>Plik CSV</span>
+            <select id="dataset-select"></select>
+          </label>
+          <label class="field upload">
+            <span>Wrzuć nowe dane</span>
+            <input type="file" id="dataset-upload" accept=".csv" />
+          </label>
+          <button class="ghost" id="refresh-datasets">Odśwież listę</button>
+        </section>
+
+        <section class="block">
+          <div class="section-title">Parametry strategii</div>
+          <div class="grid two">
+            <label class="field"><span>Initial</span><input id="initial-capital" type="number" value="100000" /></label>
+            <label class="field"><span>Daily cap</span><input id="daily-capital" type="number" value="100000" /></label>
+            <label class="field"><span>HalfLength</span><input id="half-length" type="number" value="12" /></label>
+            <label class="field"><span>ATR Period</span><input id="atr-period" type="number" value="200" /></label>
+            <label class="field"><span>ATR Mult</span><input id="atr-multiplier" type="number" step="0.1" value="2.8" /></label>
+            <label class="field"><span>SL</span><input id="stop-loss" type="number" step="0.001" value="0.01" /></label>
+            <label class="field"><span>SL Add</span><input id="stop-loss-add" type="number" step="0.001" value="0.01" /></label>
+            <label class="field"><span>Lev start</span><input id="leverage-initial" type="number" step="0.01" value="0.5" /></label>
+            <label class="field"><span>Lev profit</span><input id="leverage-profit" type="number" step="0.01" value="0.5" /></label>
+            <label class="field"><span>Lev loss</span><input id="leverage-loss" type="number" step="0.01" value="0.01" /></label>
+            <label class="field"><span>Spread bps</span><input id="spread-bps" type="number" step="0.1" value="0" /></label>
+            <label class="field toggle"><span>Force close end</span><input id="force-close" type="checkbox" /></label>
+          </div>
+        </section>
+
+        <section class="block">
+          <div class="section-title">WFO</div>
+          <div class="grid two">
+            <label class="field"><span>Train bars</span><input id="wfo-train-bars" type="number" value="350" /></label>
+            <label class="field"><span>Test bars</span><input id="wfo-test-bars" type="number" value="120" /></label>
+            <label class="field"><span>Step bars</span><input id="wfo-step-bars" type="number" value="120" /></label>
+            <label class="field">
+              <span>Scoring</span>
+              <select id="wfo-scoring">
+                <option value="balanced">balanced</option>
+                <option value="defensive">defensive</option>
+                <option value="return_only">return_only</option>
+              </select>
+            </label>
+            <label class="field"><span>Half grid</span><input id="grid-half-length" type="text" value="10,12,14" /></label>
+            <label class="field"><span>ATR grid</span><input id="grid-atr-period" type="text" value="150,200,250" /></label>
+            <label class="field"><span>ATR mult grid</span><input id="grid-atr-multiplier" type="text" value="2.4,2.8,3.2" /></label>
+            <label class="field"><span>SL grid</span><input id="grid-stop-loss" type="text" value="0.008,0.01,0.012" /></label>
+            <label class="field"><span>SL add grid</span><input id="grid-stop-loss-add" type="text" value="0.008,0.01,0.012" /></label>
+            <label class="field"><span>Lev profit grid</span><input id="grid-leverage-profit" type="text" value="0.25,0.5,1.0" /></label>
+          </div>
+        </section>
+
+        <section class="block actions">
+          <button class="primary" id="run-backtest">Uruchom backtest</button>
+          <button class="accent" id="run-wfo">Uruchom WFO</button>
+          <div id="status-box">Czekam na pierwszy run.</div>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <section class="hero panel">
+          <div>
+            <div class="eyebrow">TradingView open source</div>
+            <h2>Transakcje dokładnie na świecach</h2>
+            <p>
+              Wykres pokazuje świece, pasma TMA i markery wejść/wyjść. To jest pierwsza
+              warstwa laboratoryjna przed dokładaniem kolejnych filtrów jak RSI albo Stoch RSI.
+            </p>
+          </div>
+          <div class="hero-note">
+            <div class="note-title">Uwaga</div>
+            <p>
+              Logika strategii i money management są przepisane z EA. Przy danych OHLC
+              wykonanie intrabar jest symulowane ścieżką świecy.
+            </p>
+          </div>
+        </section>
+
+        <section class="metrics" id="metrics-grid"></section>
+
+        <section class="panel chart-panel">
+          <div class="panel-head">
+            <div>
+              <div class="eyebrow">price map</div>
+              <h3>Chart + trade markers</h3>
+            </div>
+            <div class="tv-attribution">
+              Charting by
+              <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">TradingView</a>
+              using Lightweight Charts™
+            </div>
+          </div>
+          <div id="chart"></div>
+        </section>
+
+        <section class="grid-panels">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <div class="eyebrow">orders</div>
+                <h3>Trades</h3>
+              </div>
+            </div>
+            <div class="table-wrap"><table id="trades-table"></table></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <div class="eyebrow">walk forward</div>
+                <h3>WFO windows</h3>
+              </div>
+            </div>
+            <div class="table-wrap"><table id="windows-table"></table></div>
+          </section>
+        </section>
+
+        <section class="panel" id="json-panel">
+          <div class="panel-head">
+            <div>
+              <div class="eyebrow">payload</div>
+              <h3>Best params / open positions</h3>
+            </div>
+          </div>
+          <pre id="result-json">{}</pre>
+        </section>
+      </main>
+    </div>
+
+    <script src="https://unpkg.com/lightweight-charts@5.0.8/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

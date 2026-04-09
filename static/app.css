@@ -1,0 +1,379 @@
+:root {
+  --bg: #09111b;
+  --bg-2: #101d2f;
+  --panel: rgba(11, 21, 36, 0.86);
+  --panel-2: rgba(18, 31, 52, 0.9);
+  --border: rgba(131, 153, 179, 0.18);
+  --text: #eef6ff;
+  --muted: #95a6bc;
+  --teal: #22d3aa;
+  --amber: #ffb454;
+  --coral: #ff7a59;
+  --sky: #69b7ff;
+  --rose: #ff5d73;
+  --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(105, 183, 255, 0.14), transparent 30%),
+    radial-gradient(circle at top right, rgba(255, 180, 84, 0.12), transparent 28%),
+    linear-gradient(160deg, #08101a 0%, #0b1524 45%, #132238 100%);
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: minmax(320px, 380px) 1fr;
+  gap: 24px;
+  padding: 24px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(20px);
+}
+
+.controls {
+  position: sticky;
+  top: 24px;
+  padding: 24px;
+  height: fit-content;
+}
+
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--amber);
+  margin-bottom: 10px;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+}
+
+h1 {
+  font-size: 36px;
+  line-height: 1.02;
+  margin-bottom: 12px;
+}
+
+h2 {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+h3 {
+  font-size: 22px;
+}
+
+p,
+.lede {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.block {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.section-title {
+  margin-bottom: 14px;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sky);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.field span {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+input,
+select,
+button,
+pre {
+  font-family: inherit;
+}
+
+input,
+select {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--panel-2);
+  color: var(--text);
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-size: 14px;
+}
+
+input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--teal);
+}
+
+.toggle {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: var(--panel-2);
+}
+
+.grid {
+  display: grid;
+  gap: 10px;
+}
+
+.grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+button {
+  border: none;
+  border-radius: 16px;
+  padding: 14px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 120ms ease, filter 120ms ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+}
+
+button.primary {
+  background: linear-gradient(135deg, var(--teal), #0f766e);
+  color: #06110f;
+}
+
+button.accent {
+  background: linear-gradient(135deg, var(--amber), var(--coral));
+  color: #1e1008;
+}
+
+button.ghost {
+  width: 100%;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+#status-box {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.workspace {
+  display: grid;
+  gap: 22px;
+}
+
+.hero {
+  padding: 24px;
+  display: grid;
+  grid-template-columns: 1.4fr 0.8fr;
+  gap: 20px;
+  align-items: stretch;
+}
+
+.hero-note {
+  padding: 18px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(105, 183, 255, 0.12), rgba(255, 180, 84, 0.08));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.note-title {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--amber);
+  margin-bottom: 8px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.metric {
+  padding: 18px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(10, 18, 31, 0.85));
+  border: 1px solid var(--border);
+}
+
+.metric .label {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.metric .value {
+  margin-top: 10px;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.metric .sub {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.chart-panel {
+  padding: 24px;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-end;
+  margin-bottom: 18px;
+}
+
+.tv-attribution {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tv-attribution a {
+  color: var(--sky);
+}
+
+#chart {
+  width: 100%;
+  height: 560px;
+  border-radius: 20px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(5, 10, 17, 0.55));
+}
+
+.grid-panels {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr;
+  gap: 22px;
+}
+
+.table-wrap {
+  overflow: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 12px 10px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  font-size: 13px;
+}
+
+th {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+}
+
+#json-panel {
+  padding: 24px;
+}
+
+#result-json {
+  margin: 0;
+  padding: 18px;
+  min-height: 180px;
+  border-radius: 18px;
+  background: rgba(5, 10, 17, 0.7);
+  color: #c7f9ea;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  overflow: auto;
+}
+
+@media (max-width: 1280px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .controls {
+    position: static;
+  }
+
+  .metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .grid-panels,
+  .hero {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .shell {
+    padding: 14px;
+    gap: 16px;
+  }
+
+  .controls,
+  .chart-panel,
+  #json-panel,
+  .hero {
+    padding: 18px;
+  }
+
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grid.two {
+    grid-template-columns: 1fr;
+  }
+
+  #chart {
+    height: 420px;
+  }
+}

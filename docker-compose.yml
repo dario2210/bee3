@@ -1,0 +1,21 @@
+services:
+  bee3-bot:
+    build:
+      context: /home/darek/apps/infra/bee3
+      dockerfile: Dockerfile
+    image: bee3-bot:latest
+    container_name: bee3_bot
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8061:8061"
+    volumes:
+      - /home/darek/apps/infra/bee3:/app
+    environment:
+      - TZ=Europe/Warsaw
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8061/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
