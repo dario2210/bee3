@@ -1,34 +1,78 @@
 # Bee3 Icarus MMS Lab
 
-`bee3` to osobny dashboard do backtestu i WFO strategii odtworzonej z:
+Bee3 is a dedicated research dashboard for backtesting and walk-forward optimization
+of the Icarus MMS trading logic recreated from:
 
 - `FTMO_ICARUSMMS_MAIN.mq5`
 - `tma_indikator.mq5`
 
-Na tym etapie aplikacja:
+The goal of this first stage is simple: reproduce the original mechanics as closely
+as possible, inspect trade placement directly on the chart, and create a clean base
+for later extensions such as RSI or Stoch RSI filters.
 
-- odtwarza logikę TMA oraz mechanikę pozycji i kapitału z EA,
-- pozwala wrzucać własne CSV OHLCV,
-- uruchamia pojedynczy backtest albo walk-forward optimization,
-- pokazuje transakcje na wykresie opartym o TradingView Lightweight Charts,
-- zapisuje ostatnie wyniki do katalogu `results/`.
+## Dashboard Preview
 
-## Start lokalny
+![Bee3 dashboard preview](docs/dashboard-preview.svg)
+
+## What is included
+
+- TMA band logic translated from the MQL5 indicator
+- position sizing and capital management recreated from the EA
+- backtest mode for uploaded OHLCV CSV files
+- walk-forward optimization with configurable parameter grids
+- chart view with trade entry and exit markers using TradingView Lightweight Charts
+- containerized deployment for local runs and Contabo hosting
+
+## Stack
+
+- FastAPI backend
+- pandas + numpy simulation engine
+- TradingView Lightweight Charts frontend
+- Docker / docker compose deployment
+
+## Project Layout
+
+```text
+bee3/
+  bee3_dashboard.py
+  bee3_engine.py
+  bee3_wfo.py
+  bee3_tma.py
+  bee3_data.py
+  static/
+  data/
+  results/
+  docs/
+```
+
+## Quick Start
 
 ```bash
 pip install -r requirements.txt
 uvicorn bee3_dashboard:app --host 0.0.0.0 --port 8061
 ```
 
-Potem otwórz:
+Open:
 
 ```text
 http://127.0.0.1:8061
 ```
 
-## CSV
+## Docker
 
-CSV powinien zawierać co najmniej:
+```bash
+docker compose up -d --build
+```
+
+The default dashboard port is:
+
+```text
+127.0.0.1:8061
+```
+
+## Input Data
+
+CSV files should contain at least:
 
 - `time`
 - `open`
@@ -36,19 +80,44 @@ CSV powinien zawierać co najmniej:
 - `low`
 - `close`
 
-Opcjonalnie:
+Optional:
 
 - `volume`
 
-`time` może być w ISO-8601 albo jako unix timestamp w sekundach lub milisekundach.
+Supported time formats:
 
-## Ważna uwaga o 1:1
+- ISO-8601
+- Unix timestamp in seconds
+- Unix timestamp in milliseconds
 
-Silnik odwzorowuje logikę wejść, wyjść, TMA i money management z MQL.
-Jeżeli dane wejściowe są świecowe, wykonanie intrabar jest symulowane po ścieżce:
+Example flow:
 
-- świeca wzrostowa: `open -> low -> high -> close`
-- świeca spadkowa: `open -> high -> low -> close`
+1. Start the app.
+2. Upload your own CSV from the dashboard.
+3. Run a backtest or WFO pass.
+4. Inspect trade placement directly on the chart.
 
-To pozwala testować strategię na OHLC bez ticków. Gdy później dołożymy feed tickowy,
-warstwa wykonania może zostać jeszcze doszczelniona bez zmiany reguł strategii.
+## Important Note About 1:1 Recreation
+
+The engine reproduces the strategy rules and money management from the provided MQL files.
+When only candle data is available, intrabar execution is simulated using a candle path:
+
+- bullish candle: `open -> low -> high -> close`
+- bearish candle: `open -> high -> low -> close`
+
+That gives us a practical first testing layer on OHLC data without changing the strategy rules.
+If tick data is added later, execution accuracy can be tightened further without redesigning the logic.
+
+## Repository Policy
+
+Sample market datasets are intentionally not stored in the repository anymore.
+The `data/` directory is kept in place only as an upload target and local working folder.
+
+## Current Status
+
+This repository is the first operational lab version:
+
+- strategy logic is in place
+- dashboard is online-ready
+- GitHub version is clean from sample data
+- the next step can focus on additional decision filters and strategy refinement
